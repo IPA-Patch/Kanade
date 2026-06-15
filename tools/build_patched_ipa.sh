@@ -18,6 +18,12 @@
 # Re-running with the same input IPA is idempotent — every step no-ops
 # when its patch is already applied.
 #
+# Python interpreter selection: in order, $PYTHON_BIN, then $VIRTUAL_ENV,
+# then `<consumer>/.venv/bin/python3`, then `python3` on PATH. The Python
+# steps need `lief`, which is normally only available inside the
+# consumer's venv, so we autodetect rather than force every operator to
+# `source .venv/bin/activate` first.
+#
 # Usage:
 #   tools/build_patched_ipa.sh \
 #     --recipe <recipe-name> \
@@ -80,6 +86,32 @@ CONSUMER_DIR="$(pwd)"
 # the Shared root for `from tools.encode` / `from tools.machoops`.
 export PYTHONPATH="${CONSUMER_DIR}:${SHARED_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 
+# Pick the Python interpreter. tools.patch_macho needs `lief`, which is
+# normally installed into the consumer's local virtualenv (uv venv /
+# python -m venv) rather than system site-packages. Prefer, in order:
+#
+#   1. $PYTHON_BIN  (explicit operator override, takes precedence)
+#   2. $VIRTUAL_ENV (a venv is already activated in the calling shell)
+#   3. <consumer>/.venv/bin/python3 (the convention this repo + every
+#      consumer adopts via `uv venv` / pyproject.toml)
+#   4. system `python3`
+#
+# This lets `make ipa` work straight from a freshly-attached devcontainer
+# without the operator having to remember `source .venv/bin/activate`
+# first, and stays out of the way of every other workflow (existing
+# CI / a script-driven build sets VIRTUAL_ENV; an operator with a
+# differently-named venv sets PYTHON_BIN).
+if [ -n "${PYTHON_BIN:-}" ]; then
+    PY="$PYTHON_BIN"
+elif [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/python3" ]; then
+    PY="$VIRTUAL_ENV/bin/python3"
+elif [ -x "$CONSUMER_DIR/.venv/bin/python3" ]; then
+    PY="$CONSUMER_DIR/.venv/bin/python3"
+    echo "==> using consumer venv: $PY"
+else
+    PY="python3"
+fi
+
 DYLIB_BASENAME="$(basename "$DYLIB_SRC")"
 DYLIB_STEM="${DYLIB_BASENAME%.dylib}"
 OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${DYLIB_STEM}-binpatch.ipa}"
@@ -104,8 +136,18 @@ if ! command -v zip >/dev/null 2>&1; then
     echo "error: zip not on PATH" >&2
     exit 1
 fi
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "error: python3 not on PATH" >&2
+if ! command -v "$PY" >/dev/null 2>&1 && [ ! -x "$PY" ]; then
+    echo "error: python3 not on PATH (PY=$PY)" >&2
+    exit 1
+fi
+# Sanity-check that the picked interpreter has `lief` (the only non-stdlib
+# dep tools.patch_macho needs). If not, fail loudly with a hint, instead
+# of letting `python3 -m tools.patch_macho` ImportError deep in the run.
+if ! "$PY" -c "import lief" 2>/dev/null; then
+    echo "error: $PY can't import 'lief'." >&2
+    echo "       install it into a venv (e.g. 'uv sync' or" >&2
+    echo "       'python3 -m pip install lief') and re-run, or set" >&2
+    echo "       PYTHON_BIN=<path/to/python> to point at one that has it." >&2
     exit 1
 fi
 
@@ -145,16 +187,16 @@ fi
 # 2. patch framework
 # ---------------------------------------------------------------------------
 echo "==> patching $FRAMEWORK (recipe: $RECIPE)"
-python3 -m tools.patch_macho --recipe "$RECIPE" "$FRAMEWORK_BIN"
+"$PY" -m tools.patch_macho --recipe "$RECIPE" "$FRAMEWORK_BIN"
 
 echo "==> verifying LC_LOAD_DYLIB (recipe: $RECIPE)"
-python3 -m tools.verify_lc_load --recipe "$RECIPE" "$FRAMEWORK_BIN" >/dev/null
+"$PY" -m tools.verify_lc_load --recipe "$RECIPE" "$FRAMEWORK_BIN" >/dev/null
 
 # ---------------------------------------------------------------------------
 # 3. patch Info.plist
 # ---------------------------------------------------------------------------
 echo "==> patching Info.plist (recipe: $RECIPE)"
-python3 -m tools.patch_plist --recipe "$RECIPE" "$INFO_PLIST"
+"$PY" -m tools.patch_plist --recipe "$RECIPE" "$INFO_PLIST"
 
 # ---------------------------------------------------------------------------
 # 4. inject dylib
