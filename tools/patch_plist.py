@@ -2,7 +2,7 @@
 """Set keys on an Info.plist (or any plist) in place.
 
 Adds/overwrites the given keys on the plist at ``--target``. Keys come
-from either ``--recipe <name>`` (a recipe module under ``tools.recipes``
+from either ``--recipe <name>`` (a recipe module under ``recipes``
 exposing ``PLIST_KEYS: dict``) or one or more ``--set KEY=VALUE`` flags
 on the command line.
 
@@ -52,7 +52,7 @@ def _parse_kv(s: str) -> tuple[str, object]:
 
 def _load_recipe_keys(name: str) -> dict:
     if "." not in name:
-        name = f"tools.recipes.{name}"
+        name = f"recipes.{name}"
     try:
         mod = importlib.import_module(name)
     except ImportError as e:
@@ -72,7 +72,7 @@ def main() -> int:
     parser.add_argument("target", help="Path to the plist (read+write).")
     parser.add_argument(
         "--recipe",
-        help="Recipe to pull PLIST_KEYS from (module name under tools.recipes).",
+        help="Recipe to pull PLIST_KEYS from (module name under recipes).",
     )
     parser.add_argument(
         "--set",

@@ -25,7 +25,7 @@ import sys
 
 def _needle_from_recipe(name: str) -> str:
     if "." not in name:
-        name = f"tools.recipes.{name}"
+        name = f"recipes.{name}"
     try:
         mod = importlib.import_module(name)
     except ImportError as e:
