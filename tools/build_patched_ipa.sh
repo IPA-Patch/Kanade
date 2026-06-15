@@ -136,10 +136,27 @@ if ! command -v zip >/dev/null 2>&1; then
     echo "error: zip not on PATH" >&2
     exit 1
 fi
-if ! command -v "$PY" >/dev/null 2>&1 && [ ! -x "$PY" ]; then
-    echo "error: python3 not on PATH (PY=$PY)" >&2
-    exit 1
-fi
+# Validate the picked interpreter. The check splits on whether $PY is a
+# path (contains a /) or a bare command name, because `command -v` has
+# subtly different semantics in each case:
+#   * absolute / relative path → many shells just check file existence,
+#     not the +x bit. So we explicitly require -x for path-like values.
+#   * bare command → `command -v` does PATH lookup and only succeeds if
+#     an executable is found, which is exactly what we want.
+case "$PY" in
+    */*)
+        if [ ! -x "$PY" ]; then
+            echo "error: python interpreter not executable: $PY" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        if ! command -v "$PY" >/dev/null 2>&1; then
+            echo "error: $PY not on PATH" >&2
+            exit 1
+        fi
+        ;;
+esac
 # Sanity-check that the picked interpreter has `lief` (the only non-stdlib
 # dep tools.patch_macho needs). If not, fail loudly with a hint, instead
 # of letting `python3 -m tools.patch_macho` ImportError deep in the run.
