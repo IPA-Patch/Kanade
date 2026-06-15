@@ -1,0 +1,32 @@
+[project]
+name = "ipa-patch-shared"
+version = "0.1.0"
+description = "Shared static-patch tooling for IPA-Patch projects (arm64 encoder, Mach-O ops, IPA pipeline)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "lief>=0.17.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.15.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Keep the lint surface small; encoder code has a lot of magic numbers by
+# design (instruction templates), and the test file repeats register
+# numbers across many cases.
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",  # long instruction-template lines
+]
