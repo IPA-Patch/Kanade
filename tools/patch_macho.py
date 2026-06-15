@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generic Mach-O static patcher.
 
-Loads a recipe (a Python module under ``tools.recipes``) describing what
+Loads a recipe (a Python module under ``recipes``) describing what
 to patch and applies it to a target Mach-O. The recipe is fully
 self-contained — it owns the cave region, the hook slot RVA, the patch
 list, and the dylib name — so this driver carries zero per-target
@@ -39,10 +39,13 @@ from tools.machoops import add_lc_load_dylib, assert_slot_in_bss, reserve_hook_s
 
 def _load_recipe(name: str):
     """Import a recipe module by short name (e.g. ``kioukifexporter``)
-    or fully-qualified module path (e.g. ``tools.recipes.kioukifexporter``).
+    or fully-qualified module path (e.g. ``recipes.kioukifexporter``).
+
+    Bare names default to ``recipes.<name>`` — consumer projects keep
+    their recipes in a top-level ``recipes/`` package on ``PYTHONPATH``.
     """
     if "." not in name:
-        name = f"tools.recipes.{name}"
+        name = f"recipes.{name}"
     try:
         return importlib.import_module(name)
     except ImportError as e:
@@ -60,7 +63,7 @@ def main() -> int:
     parser.add_argument(
         "--recipe",
         required=True,
-        help="Recipe to apply (module name under tools.recipes, or full module path).",
+        help="Recipe to apply (module name under recipes, or full module path).",
     )
     parser.add_argument(
         "--verify-only",

@@ -71,11 +71,19 @@ if [ -z "$RECIPE" ] || [ -z "$FRAMEWORK" ] || [ -z "$DYLIB_SRC" ] || [ -z "$INPU
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# SHARED_DIR is the IPA-Patch/Shared root (this script's grandparent).
+# CONSUMER_DIR is wherever the consumer invoked this script from — its
+# repo root by convention, and the directory we resolve recipes against.
+SHARED_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONSUMER_DIR="$(pwd)"
+# Python needs to see both: the consumer for `from recipes.<name>` and
+# the Shared root for `from tools.encode` / `from tools.machoops`.
+export PYTHONPATH="${CONSUMER_DIR}:${SHARED_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+
 DYLIB_BASENAME="$(basename "$DYLIB_SRC")"
 DYLIB_STEM="${DYLIB_BASENAME%.dylib}"
-OUTPUT_IPA="${OUTPUT_IPA:-$PROJECT_DIR/packages/ipa/${DYLIB_STEM}-binpatch.ipa}"
-WORK_DIR="$PROJECT_DIR/.theos/ipa_build"
+OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${DYLIB_STEM}-binpatch.ipa}"
+WORK_DIR="$CONSUMER_DIR/.theos/ipa_build"
 
 # ---------------------------------------------------------------------------
 # Sanity checks
@@ -137,16 +145,16 @@ fi
 # 2. patch framework
 # ---------------------------------------------------------------------------
 echo "==> patching $FRAMEWORK (recipe: $RECIPE)"
-(cd "$PROJECT_DIR" && python3 -m tools.patch_macho --recipe "$RECIPE" "$FRAMEWORK_BIN")
+python3 -m tools.patch_macho --recipe "$RECIPE" "$FRAMEWORK_BIN"
 
 echo "==> verifying LC_LOAD_DYLIB (recipe: $RECIPE)"
-(cd "$PROJECT_DIR" && python3 -m tools.verify_lc_load --recipe "$RECIPE" "$FRAMEWORK_BIN" >/dev/null)
+python3 -m tools.verify_lc_load --recipe "$RECIPE" "$FRAMEWORK_BIN" >/dev/null
 
 # ---------------------------------------------------------------------------
 # 3. patch Info.plist
 # ---------------------------------------------------------------------------
 echo "==> patching Info.plist (recipe: $RECIPE)"
-(cd "$PROJECT_DIR" && python3 -m tools.patch_plist --recipe "$RECIPE" "$INFO_PLIST")
+python3 -m tools.patch_plist --recipe "$RECIPE" "$INFO_PLIST"
 
 # ---------------------------------------------------------------------------
 # 4. inject dylib

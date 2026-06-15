@@ -3,7 +3,7 @@
 These functions take only generic positional inputs (a path, a dylib
 name, a section name) and have no knowledge of any particular target
 binary. Per-target constants (cave region, slot VA, hook sites) live in
-``tools.recipes``.
+``recipes``.
 """
 
 from __future__ import annotations
