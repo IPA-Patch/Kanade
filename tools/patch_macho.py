@@ -99,6 +99,7 @@ def main() -> int:
             return 1
 
     hook_slot_rva = getattr(recipe, "HOOK_SLOT_RVA", None)
+    probed_hook_slot_rva = getattr(recipe, "PROBED_HOOK_SLOT_RVA", hook_slot_rva)
     cave_region = getattr(recipe, "CAVE_REGION", None)
     patches = getattr(recipe, "PATCHES", [])
     cave_patches = getattr(recipe, "CAVE_PATCHES", [])
@@ -141,19 +142,28 @@ def main() -> int:
             print(f"  WARN  {e}", file=sys.stderr)
 
     # ----- hook slot probe -----
-    # Sanity check: confirm the runtime-discovered slot still matches
-    # the baked-in recipe constant the caves were compiled against.
+    # Sanity check: confirm the runtime-discovered slot still matches the
+    # recipe's expected probe value. Most recipes use the probed tail slot as
+    # their HOOK_SLOT_RVA. Recipes that intentionally choose a nearby sibling
+    # slot for coexistence can expose PROBED_HOOK_SLOT_RVA separately to avoid
+    # a false drift warning while still validating that the underlying __bss
+    # layout did not move.
     if hook_slot_rva is not None:
         try:
             slot_rva = reserve_hook_slot(args.target)
             if slot_rva is not None:
                 print(f"  INFO  recipe HOOK_SLOT_RVA = 0x{hook_slot_rva:X}")
-                if slot_rva != hook_slot_rva:
+                if probed_hook_slot_rva != hook_slot_rva:
+                    print(
+                        f"  INFO  recipe PROBED_HOOK_SLOT_RVA = "
+                        f"0x{probed_hook_slot_rva:X}"
+                    )
+                if slot_rva != probed_hook_slot_rva:
                     print(
                         f"  WARN  slot VA drift: reserve_hook_slot returned "
-                        f"0x{slot_rva:X}, but caves were built against "
-                        f"0x{hook_slot_rva:X}. Re-pin the recipe constant and "
-                        "re-patch the binary.",
+                        f"0x{slot_rva:X}, but the recipe expects probe slot "
+                        f"0x{probed_hook_slot_rva:X}. Re-pin the recipe "
+                        "constant and re-patch the binary.",
                         file=sys.stderr,
                     )
         except NotImplementedError as e:
