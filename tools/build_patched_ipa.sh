@@ -114,7 +114,7 @@ fi
 
 DYLIB_BASENAME="$(basename "$DYLIB_SRC")"
 DYLIB_STEM="${DYLIB_BASENAME%.dylib}"
-OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${DYLIB_STEM}-binpatch.ipa}"
+OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${DYLIB_STEM}-patched.ipa}"
 WORK_DIR="$CONSUMER_DIR/.theos/ipa_build"
 
 # ---------------------------------------------------------------------------
