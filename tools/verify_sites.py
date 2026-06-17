@@ -203,7 +203,13 @@ def _load_recipe(name: str):
 
 def verify(args: argparse.Namespace) -> int:
     recipe = _load_recipe(args.recipe)
-    sites: Iterable[tuple[int, int, str, str]] = getattr(recipe, "_SITES", [])
+    # Recipes across IPA-Patch siblings use slightly different row shapes:
+    #   * KiouEditor / KiouKifExporter: 4-tuple (slot, off, prologue, label)
+    #   * KiouForge:                    6-tuple (slot, off, prologue, kind,
+    #                                            aux, label)
+    # We only need the first three columns and the last (label); accept any
+    # row shape with `slot, off, prologue, *_middle, label`.
+    sites: Iterable[tuple] = getattr(recipe, "_SITES", [])
     if not sites:
         print(f"error: recipe {args.recipe!r} has no _SITES table", file=sys.stderr)
         return 2
@@ -213,7 +219,19 @@ def verify(args: argparse.Namespace) -> int:
 
     fail = 0
     total = 0
-    for slot_index, site_off, prologue_hex, label in sites:
+    for row in sites:
+        if len(row) < 4:
+            print(
+                f"  FAIL  row {row!r}: expected at least "
+                f"(slot, off, prologue, label); got {len(row)} columns"
+            )
+            fail += 1
+            total += 1
+            continue
+        slot_index = row[0]
+        site_off = row[1]
+        prologue_hex = row[2]
+        label = row[-1]
         total += 1
         try:
             type_name, method_name = split_label(label)
