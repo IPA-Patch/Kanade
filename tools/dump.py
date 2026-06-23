@@ -101,14 +101,25 @@ def version_from_ipa(ipa_path: str) -> str:
 
 def find_targets(force: bool) -> list[dict]:
     """Return list of {ipa, ver_dir, version, needs_dump, needs_index}."""
+    if not os.path.isdir(ASSETS_DIR):
+        die(
+            f"assets directory not found: {ASSETS_DIR}\n"
+            "Create it and place decrypted IPA files under assets/<version>/."
+        )
     targets = []
     for entry in sorted(os.listdir(ASSETS_DIR)):
         ver_dir = os.path.join(ASSETS_DIR, entry)
         if not os.path.isdir(ver_dir):
             continue
-        ipas = [f for f in os.listdir(ver_dir) if f.endswith(".ipa")]
+        ipas = sorted(f for f in os.listdir(ver_dir) if f.endswith(".ipa"))
         if not ipas:
             continue
+        if len(ipas) > 1:
+            die(
+                f"multiple IPA files found in {ver_dir}:\n"
+                + "\n".join(f"  {f}" for f in ipas)
+                + "\nRemove all but the one to dump."
+            )
         ipa_path = os.path.join(ver_dir, ipas[0])
         dump_cs = os.path.join(ver_dir, "dump.cs")
         dump_idx = os.path.join(ver_dir, "dump.cs.index.json")
