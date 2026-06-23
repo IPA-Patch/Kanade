@@ -99,8 +99,8 @@ Or via `pyproject.toml`:
 pythonpath = ["shared", "."]
 ```
 
-Write your recipe package under `recipes/`. The `__init__.py` reads
-`KIOU_TARGET_VERSION` (or your own env var) and re-exports the patch surface
+Write your recipe package under `recipes/`. The `__init__.py` reads an
+environment variable of your choosing and re-exports the patch surface
 that `tools.patch_macho` expects:
 
 ```python
@@ -117,7 +117,8 @@ SITES = [(rva, prologue_hex, hook_id, kind, label), ...]
 
 # recipes/__init__.py  — dispatcher
 import os, importlib
-_v = importlib.import_module(f"recipes.v{os.environ.get('KIOU_TARGET_VERSION','1.0.1').replace('.','_')}")
+_ver = os.environ.get("MY_TARGET_VERSION", "1.0.1")
+_v = importlib.import_module(f"recipes.v{_ver.replace('.', '_')}")
 PATCHES, CAVE_PATCHES, _SITES = common.build_exports(_v.SITES, ...)
 ```
 
