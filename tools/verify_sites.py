@@ -114,28 +114,46 @@ def _sig_matches(sig: str, method_name: str) -> bool:
 
 
 def find_method(
-    by_name: dict[str, list[dict]], type_name: str | None, method_name: str
+    by_name: dict[str, list[dict]],
+    type_name: str | None,
+    method_name: str,
+    expected_rva: int | None = None,
 ) -> tuple[dict, dict] | None:
-    """Return ``(type_record, method_record)`` for the first method
-    whose ``sig`` declares ``method_name`` on the named type.
+    """Return ``(type_record, method_record)`` for the method matching
+    ``method_name`` on the named type.
 
-    When ``type_name`` is ``None`` (caller couldn't parse it out of the
-    recipe label) we scan every type and return the first hit. Slow
-    but unambiguous for recipe rows that omit the qualifier.
+    When the type has overloads (multiple sigs with the same method name),
+    and ``expected_rva`` is provided, the overload whose ``rva`` matches is
+    preferred over the first textual hit. This resolves ambiguity for
+    methods like ``TryMakeMove`` that appear in both a single-arg and an
+    out-arg variant.
+
+    When ``type_name`` is ``None`` we scan every type for the first hit.
     """
+    def _pick_best(candidates_iter):
+        first_hit = None
+        for t, m in candidates_iter:
+            if not _sig_matches(m.get("sig", ""), method_name):
+                continue
+            if expected_rva is not None and int(m.get("rva", "0x0"), 0) == expected_rva:
+                return t, m  # exact RVA match wins immediately
+            if first_hit is None:
+                first_hit = (t, m)
+        return first_hit
+
     if type_name is None:
-        for t in by_name.values():
-            for tt in t:
-                for m in tt.get("methods", []):
-                    if _sig_matches(m.get("sig", ""), method_name):
-                        return tt, m
-        return None
-    candidates = by_name.get(type_name, [])
-    for t in candidates:
-        for m in t.get("methods", []):
-            if _sig_matches(m.get("sig", ""), method_name):
-                return t, m
-    return None
+        def _all():
+            for types in by_name.values():
+                for tt in types:
+                    for m in tt.get("methods", []):
+                        yield tt, m
+        return _pick_best(_all())
+
+    def _named():
+        for t in by_name.get(type_name, []):
+            for m in t.get("methods", []):
+                yield t, m
+    return _pick_best(_named())
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +258,7 @@ def verify(args: argparse.Namespace) -> int:
             fail += 1
             continue
 
-        hit = find_method(by_name, type_name, method_name)
+        hit = find_method(by_name, type_name, method_name, expected_rva=site_off)
         if hit is None:
             print(
                 f"  FAIL  slot[{slot_index:>2}] {label!r}: "
@@ -307,6 +325,11 @@ def main() -> int:
         required=True,
         help="Path to dump.cs.index.json produced from Il2CppDumper output.",
     )
+    parser.add_argument(
+        "--version",
+        help="Target app version to verify (sets KIOU_TARGET_VERSION before "
+             "importing the recipe). E.g. --version 1.0.2",
+    )
     src = parser.add_mutually_exclusive_group()
     src.add_argument(
         "--macho",
@@ -323,6 +346,9 @@ def main() -> int:
         help="Basename of the Mach-O inside the .ipa (default: UnityFramework).",
     )
     args = parser.parse_args()
+
+    if args.version:
+        os.environ["KIOU_TARGET_VERSION"] = args.version
 
     if not os.path.isfile(args.index):
         print(f"error: dump index not found: {args.index}", file=sys.stderr)
