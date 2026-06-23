@@ -353,7 +353,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.version:
-        os.environ["KIOU_TARGET_VERSION"] = args.version
+        os.environ["TARGET_VERSION"] = args.version
 
     if not os.path.isfile(args.index):
         print(f"error: dump index not found: {args.index}", file=sys.stderr)
