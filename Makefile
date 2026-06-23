@@ -1,4 +1,4 @@
-# IPA-Patch/Shared — top-level development tasks.
+# IPA-Patch/Kanade — top-level development tasks.
 #
 # `uv` runs the Python tooling in an isolated environment so the dev
 # dependencies declared in pyproject.toml are reproducible across

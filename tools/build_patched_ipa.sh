@@ -77,13 +77,14 @@ if [ -z "$RECIPE" ] || [ -z "$FRAMEWORK" ] || [ -z "$DYLIB_SRC" ] || [ -z "$INPU
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# SHARED_DIR is the IPA-Patch/Shared root (this script's grandparent).
+# KANADE_DIR is the Kanade root (this script's grandparent).
 # CONSUMER_DIR is wherever the consumer invoked this script from — its
 # repo root by convention, and the directory we resolve recipes against.
 SHARED_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+KANADE_DIR="$SHARED_DIR"
 CONSUMER_DIR="$(pwd)"
 # Python needs to see both: the consumer for `from recipes.<name>` and
-# the Shared root for `from tools.encode` / `from tools.machoops`.
+# Kanade for `from tools.encode` / `from tools.machoops`.
 export PYTHONPATH="${CONSUMER_DIR}:${SHARED_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # Pick the Python interpreter. tools.patch_macho needs `lief`, which is

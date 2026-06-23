@@ -36,7 +36,7 @@ Steps 1–3 happen at build time on the host. This repo provides the Python tool
 - `build_patched_ipa.sh` — end-to-end IPA pipeline: decrypt → patch Mach-O → patch plist → inject dylib → repack → sign. Driven by `--recipe / --framework / --dylib / --input`.
 - `scaffold_recipe.py` — scaffolds a new per-target recipe module.
 
-`tools` is a [PEP 420](https://peps.python.org/pep-0420/) namespace package. Consumer projects can add `tools/recipes/<name>.py` alongside `shared/` and import everything through the same `tools.*` namespace.
+`tools` is a [PEP 420](https://peps.python.org/pep-0420/) namespace package. Consumer projects can add `tools/recipes/<name>.py` alongside Kanade and import everything through the same `tools.*` namespace.
 
 ## Consumer directory layout
 
