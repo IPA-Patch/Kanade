@@ -211,12 +211,17 @@ def read_prologue(args: argparse.Namespace, offset: int) -> bytes | None:
 
 
 def _load_recipe(name: str):
-    if "." not in name:
-        name = f"recipes.{name}"
-    try:
-        return importlib.import_module(name)
-    except ImportError as e:
-        raise SystemExit(f"error: failed to import recipe {name!r}: {e}") from e
+    # If the caller passed a bare package name (e.g. "recipes") or a short
+    # name without a dot (e.g. "kiouenginebridge"), try importing it directly
+    # first; if that fails, fall back to prefixing "recipes." so that short
+    # names like "kiouenginebridge" still resolve to "recipes.kiouenginebridge".
+    candidates = [name] if "." in name else [name, f"recipes.{name}"]
+    for candidate in candidates:
+        try:
+            return importlib.import_module(candidate)
+        except ImportError:
+            continue
+    raise SystemExit(f"error: failed to import recipe {name!r}")
 
 
 def verify(args: argparse.Namespace) -> int:
