@@ -2,10 +2,22 @@ name: integration
 
 on:
   push:
-    branches: [main]
+    branches: [master, develop]
   pull_request:
 
 jobs:
+  guard-source-branch:
+    name: Guard master source branch
+    if: github.event_name == 'pull_request' && github.base_ref == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require develop as source
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "::error::PRs to master must come from develop (got: ${{ github.head_ref }})"
+            exit 1
+          fi
+
   test:
     runs-on: ubuntu-latest
     steps:
