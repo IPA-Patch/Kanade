@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 import zipfile
 
 # shared/tools/ is two levels below the consumer repo root,
@@ -30,8 +31,50 @@ _HERE = os.path.dirname(os.path.abspath(__file__))         # shared/tools
 _SHARED = os.path.dirname(_HERE)                            # shared
 REPO_ROOT = os.path.dirname(_SHARED)                        # consumer repo root
 ASSETS_DIR = os.path.join(REPO_ROOT, "assets")
-DUMPER_DLL = os.path.join(REPO_ROOT, "vendor", "Il2CppDumper", "Il2CppDumper.dll")
 BUILD_INDEX = os.path.join(_HERE, "build_dump_index.py")
+
+# Il2CppDumper is cached under .cache/ (gitignored) and downloaded on first use.
+_IL2CPP_VERSION = "v6.7.46"
+_IL2CPP_URL = (
+    f"https://github.com/Perfare/Il2CppDumper/releases/download/"
+    f"{_IL2CPP_VERSION}/Il2CppDumper-net7-{_IL2CPP_VERSION}.zip"
+)
+_CACHE_DIR = os.path.join(REPO_ROOT, ".cache", "Il2CppDumper")
+DUMPER_DLL = os.path.join(_CACHE_DIR, "Il2CppDumper.dll")
+
+# runtimeconfig patched to net8 so dotnet-sdk-8.0 can run the net7 binary.
+_RUNTIMECONFIG = """{
+  "runtimeOptions": {
+    "tfm": "net8.0",
+    "framework": {
+      "name": "Microsoft.NETCore.App",
+      "version": "8.0.0"
+    },
+    "configProperties": {
+      "System.Reflection.Metadata.MetadataUpdater.IsSupported": false,
+      "System.Runtime.InteropServices.BuiltInComInterop.IsSupported": true
+    }
+  }
+}
+"""
+
+
+def _ensure_dumper() -> None:
+    """Download and cache Il2CppDumper if not already present."""
+    if os.path.exists(DUMPER_DLL):
+        return
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+    zip_path = os.path.join(_CACHE_DIR, "Il2CppDumper.zip")
+    print(f"  downloading Il2CppDumper {_IL2CPP_VERSION} …", file=sys.stderr)
+    urllib.request.urlretrieve(_IL2CPP_URL, zip_path)
+    with zipfile.ZipFile(zip_path) as z:
+        z.extractall(_CACHE_DIR)
+    os.unlink(zip_path)
+    # Patch runtimeconfig so dotnet 8 accepts the net7 binary.
+    rc = os.path.join(_CACHE_DIR, "Il2CppDumper.runtimeconfig.json")
+    with open(rc, "w") as f:
+        f.write(_RUNTIMECONFIG)
+    print(f"  cached at {_CACHE_DIR}", file=sys.stderr)
 
 FRAMEWORK_PATH = "Payload/KIOU.app/Frameworks/UnityFramework.framework/UnityFramework"
 METADATA_PATH = "Payload/KIOU.app/Data/Managed/Metadata/global-metadata.dat"
@@ -99,7 +142,7 @@ def run_dumper(ipa_path: str, ver_dir: str) -> str:
         # Il2CppDumper always writes to the directory that contains
         # Il2CppDumper.dll, regardless of cwd or the output argument.
         # We copy the DLL into a temp subdir so we can capture the output
-        # without polluting vendor/.
+        # without polluting the cache.
         dumper_dir = os.path.dirname(DUMPER_DLL)
         run_dir = os.path.join(tmp, "dumper")
         shutil.copytree(dumper_dir, run_dir)
@@ -146,12 +189,10 @@ def main() -> int:
                         help="Re-dump even when dump.cs already exists")
     args = parser.parse_args()
 
-    if not os.path.exists(DUMPER_DLL):
-        die(f"Il2CppDumper.dll not found at {DUMPER_DLL}\n"
-            "Run: make -C vendor/Il2CppDumper  or download the release zip.")
-
     if shutil.which("dotnet") is None:
         die("dotnet not on PATH — install dotnet-sdk-8.0")
+
+    _ensure_dumper()
 
     targets = find_targets(args.force)
     if not targets:
