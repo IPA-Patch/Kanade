@@ -25,7 +25,7 @@ import sys
 TEMPLATE = '''"""Recipe for {{label}}.
 
 Fill in every TODO with values discovered against the target binary
-(disassembly, lief inspection, etc.). See IPA-Patch/Shared README for
+(disassembly, lief inspection, etc.). See IPA-Patch/Kanade README for
 the contract this module satisfies.
 """
 
