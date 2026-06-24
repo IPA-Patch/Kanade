@@ -32,11 +32,14 @@ def load_recipe(name: str) -> ModuleType:
         try:
             return importlib.import_module(candidate)
         except ModuleNotFoundError as e:
-            # Swallow only "this candidate does not exist". If the candidate
-            # itself imported but something *inside* it is missing, e.name is
-            # the inner module — re-raise so the real cause is not hidden.
-            top = candidate.split(".", 1)[0]
-            if e.name in (candidate, top):
+            # Swallow only "this candidate does not exist", which means the
+            # missing module is the candidate itself or one of its ancestor
+            # packages (e.g. candidate "recipes.foo.bar" with "recipes.foo"
+            # absent). If e.name is a descendant or unrelated module, the
+            # candidate imported but something *inside* it is missing — re-raise
+            # so the real cause is not hidden as "recipe not found".
+            missing = e.name or ""
+            if candidate == missing or candidate.startswith(f"{missing}."):
                 last_missing = e
                 continue
             raise

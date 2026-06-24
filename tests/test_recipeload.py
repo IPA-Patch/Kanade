@@ -75,3 +75,13 @@ def test_missing_recipe_raises_systemexit(recipes_on_path):
     with pytest.raises(SystemExit) as exc:
         load_recipe("does_not_exist_anywhere")
     assert "does_not_exist_anywhere" in str(exc.value)
+
+
+def test_dotted_name_missing_intermediate_package_is_systemexit(recipes_on_path):
+    # A multi-dot path whose intermediate package is absent raises
+    # ModuleNotFoundError(name="recipes.missing"); that ancestor of the
+    # candidate must be treated as "recipe not found" (clean SystemExit),
+    # not re-raised as a traceback.
+    with pytest.raises(SystemExit) as exc:
+        load_recipe("recipes.missing.sub")
+    assert "recipes.missing.sub" in str(exc.value)
