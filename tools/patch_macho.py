@@ -41,15 +41,24 @@ def _load_recipe(name: str):
     """Import a recipe module by short name (e.g. ``kioukifexporter``)
     or fully-qualified module path (e.g. ``recipes.kioukifexporter``).
 
-    Bare names default to ``recipes.<name>`` — consumer projects keep
-    their recipes in a top-level ``recipes/`` package on ``PYTHONPATH``.
+    Bare names without a dot are tried in two orders:
+      1. ``recipes.<name>``  — the common case (a sub-module of the
+         consumer's ``recipes/`` package, e.g. ``recipes.kioukifexporter``)
+      2. ``<name>`` directly — handles the case where the consumer exposes
+         the entire recipe surface through a package ``__init__.py``
+         (e.g. ``--recipe recipes`` maps to the ``recipes`` package itself)
+    Fully-qualified names (containing a dot) are imported as-is.
     """
-    if "." not in name:
-        name = f"recipes.{name}"
-    try:
-        return importlib.import_module(name)
-    except ImportError as e:
-        raise SystemExit(f"error: failed to import recipe {name!r}: {e}") from e
+    candidates = [f"recipes.{name}", name] if "." not in name else [name]
+    last_exc: ImportError | None = None
+    for candidate in candidates:
+        try:
+            return importlib.import_module(candidate)
+        except ImportError as e:
+            last_exc = e
+    raise SystemExit(
+        f"error: failed to import recipe {name!r}: {last_exc}"
+    ) from last_exc
 
 
 def main() -> int:
