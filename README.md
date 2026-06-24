@@ -1,7 +1,7 @@
 <h1 align="center">Kanade</h1>
 
 <p align="center">
-  <img src="icon.webp" alt="Kanade icon" width="180" />
+  <img src="icon.webp" alt="Kanade icon" width="180" height="180" />
 </p>
 
 <p align="center">
