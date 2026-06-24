@@ -28,12 +28,13 @@ Exit status:
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import os
 import sys
 import zipfile
 from typing import Iterable
+
+from tools.recipeload import load_recipe
 
 # ---------------------------------------------------------------------------
 # Site label parsing.
@@ -210,22 +211,8 @@ def read_prologue(args: argparse.Namespace, offset: int) -> bytes | None:
 # ---------------------------------------------------------------------------
 
 
-def _load_recipe(name: str):
-    # If the caller passed a bare package name (e.g. "recipes") or a short
-    # name without a dot (e.g. "kiouenginebridge"), try importing it directly
-    # first; if that fails, fall back to prefixing "recipes." so that short
-    # names like "kiouenginebridge" still resolve to "recipes.kiouenginebridge".
-    candidates = [name] if "." in name else [name, f"recipes.{name}"]
-    for candidate in candidates:
-        try:
-            return importlib.import_module(candidate)
-        except ImportError:
-            continue
-    raise SystemExit(f"error: failed to import recipe {name!r}")
-
-
 def verify(args: argparse.Namespace) -> int:
-    recipe = _load_recipe(args.recipe)
+    recipe = load_recipe(args.recipe)
     # Recipes across IPA-Patch siblings use slightly different row shapes:
     #   * KiouEditor / KiouKifExporter: 4-tuple (slot, off, prologue, label)
     #   * KiouForge:                    6-tuple (slot, off, prologue, kind,
