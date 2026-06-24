@@ -19,17 +19,13 @@ the patched binary is fit to bundle into the .ipa.
 from __future__ import annotations
 
 import argparse
-import importlib
 import sys
+
+from tools.recipeload import load_recipe
 
 
 def _needle_from_recipe(name: str) -> str:
-    if "." not in name:
-        name = f"recipes.{name}"
-    try:
-        mod = importlib.import_module(name)
-    except ImportError as e:
-        raise SystemExit(f"error: failed to import recipe {name!r}: {e}") from e
+    mod = load_recipe(name)
     needle = getattr(mod, "DYLIB_PATH", None)
     if not needle:
         raise SystemExit(f"error: recipe {name!r} does not define DYLIB_PATH")
