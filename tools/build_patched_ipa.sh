@@ -48,7 +48,8 @@ Usage: build_patched_ipa.sh --recipe NAME --framework BASENAME --dylib PATH --in
                      Its basename must match the recipe's DYLIB_PATH leaf.
   --input IPA        Path to the clean .ipa (decrypted; this script does
                      NOT distribute the IPA itself).
-  --output IPA       Optional; defaults to packages/ipa/<basename-of-dylib>.ipa.
+  --output IPA       Optional; defaults to packages/ipa/<basename-of-input>-patched.ipa
+                     (e.g. Kiou-1.0.1.ipa -> packages/ipa/Kiou-1.0.1-patched.ipa).
 EOF
     exit 64
 }
@@ -114,8 +115,10 @@ else
 fi
 
 DYLIB_BASENAME="$(basename "$DYLIB_SRC")"
-DYLIB_STEM="${DYLIB_BASENAME%.dylib}"
-OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${DYLIB_STEM}-patched.ipa}"
+INPUT_BASENAME="$(basename "$INPUT_IPA")"
+# Strip the .ipa suffix case-insensitively so Foo.IPA / Foo.Ipa also yield "Foo".
+INPUT_STEM="${INPUT_BASENAME%.[Ii][Pp][Aa]}"
+OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${INPUT_STEM}-patched.ipa}"
 WORK_DIR="$CONSUMER_DIR/.theos/ipa_build"
 
 # ---------------------------------------------------------------------------
