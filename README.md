@@ -82,6 +82,35 @@ assets/*/dump.cs.index.json
 .cache/
 ```
 
+## The input IPA must be decrypted
+
+`build_patched_ipa.sh --input` (and `verify_sites --ipa`) both expect a
+**decrypted** IPA — the recipe pipeline cannot operate on anything else.
+
+Every App Store app ships **FairPlay-encrypted**: the main executable and its
+frameworks are stored as ciphertext on disk, and the kernel only decrypts
+them in memory at launch, on the device the purchase is tied to. Kanade
+patches the target Mach-O **on disk, before signing** — it locates each hook
+site by its machine-code prologue and overwrites it with `B <cave>`. Against
+an encrypted binary those bytes are meaningless ciphertext, so the recipe can
+neither find nor patch them. The input **must be decrypted first**.
+
+A *decrypted* IPA is one whose Mach-O slices have had the FairPlay layer
+stripped — the `cryptid` flag cleared and the encrypted pages dumped in their
+plaintext form. You make one **once per app version**, on a device that can
+already run the target app:
+
+- **[TrollDecrypt](https://github.com/donato-fiore/TrollDecrypt)** (TrollStore)
+  — dumps a decrypted `.ipa` straight to the Files app. Easiest.
+- **[palera1n](https://palera.in/) + Filza** — jailbreak, then pull the
+  decrypted bundle off disk.
+- Any on-device FairPlay dumper works; the only requirement is that the
+  resulting `.ipa` is decrypted.
+
+Drop the result at `assets/<version>/AppName-<version>.ipa` (gitignored).
+Kanade ships only the tooling — never the target app — so you always supply
+your own legally-obtained, decrypted copy.
+
 ## Usage
 
 Add both submodules to your consumer project:
