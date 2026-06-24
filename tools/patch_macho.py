@@ -29,36 +29,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import importlib
 import os
 import sys
 
 from tools.caves import apply_patches
 from tools.machoops import add_lc_load_dylib, assert_slot_in_bss, reserve_hook_slot
-
-
-def _load_recipe(name: str):
-    """Import a recipe module by short name (e.g. ``kioukifexporter``)
-    or fully-qualified module path (e.g. ``recipes.kioukifexporter``).
-
-    Bare names without a dot are tried in two orders:
-      1. ``recipes.<name>``  — the common case (a sub-module of the
-         consumer's ``recipes/`` package, e.g. ``recipes.kioukifexporter``)
-      2. ``<name>`` directly — handles the case where the consumer exposes
-         the entire recipe surface through a package ``__init__.py``
-         (e.g. ``--recipe recipes`` maps to the ``recipes`` package itself)
-    Fully-qualified names (containing a dot) are imported as-is.
-    """
-    candidates = [f"recipes.{name}", name] if "." not in name else [name]
-    last_exc: ImportError | None = None
-    for candidate in candidates:
-        try:
-            return importlib.import_module(candidate)
-        except ImportError as e:
-            last_exc = e
-    raise SystemExit(
-        f"error: failed to import recipe {name!r}: {last_exc}"
-    ) from last_exc
+from tools.recipeload import load_recipe
 
 
 def main() -> int:
@@ -95,7 +71,7 @@ def main() -> int:
         print(f"error: not a file: {args.target}", file=sys.stderr)
         return 2
 
-    recipe = _load_recipe(args.recipe)
+    recipe = load_recipe(args.recipe)
     target_basename = getattr(recipe, "TARGET_BASENAME", None)
     if target_basename and not args.skip_target_check:
         if os.path.basename(args.target) != target_basename:

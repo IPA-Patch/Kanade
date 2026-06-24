@@ -22,9 +22,10 @@ bundle keeps whatever shape its codesign hashes expect.
 from __future__ import annotations
 
 import argparse
-import importlib
 import plistlib
 import sys
+
+from tools.recipeload import load_recipe
 
 
 def _detect_format(raw: bytes) -> plistlib.PlistFormat:
@@ -51,12 +52,7 @@ def _parse_kv(s: str) -> tuple[str, object]:
 
 
 def _load_recipe_keys(name: str) -> dict:
-    if "." not in name:
-        name = f"recipes.{name}"
-    try:
-        mod = importlib.import_module(name)
-    except ImportError as e:
-        raise SystemExit(f"error: failed to import recipe {name!r}: {e}") from e
+    mod = load_recipe(name)
     keys = getattr(mod, "PLIST_KEYS", None)
     if not isinstance(keys, dict):
         raise SystemExit(
