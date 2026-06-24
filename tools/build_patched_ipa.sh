@@ -116,7 +116,8 @@ fi
 
 DYLIB_BASENAME="$(basename "$DYLIB_SRC")"
 INPUT_BASENAME="$(basename "$INPUT_IPA")"
-INPUT_STEM="${INPUT_BASENAME%.ipa}"
+# Strip the .ipa suffix case-insensitively so Foo.IPA / Foo.Ipa also yield "Foo".
+INPUT_STEM="${INPUT_BASENAME%.[Ii][Pp][Aa]}"
 OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${INPUT_STEM}-patched.ipa}"
 WORK_DIR="$CONSUMER_DIR/.theos/ipa_build"
 
