@@ -1,4 +1,14 @@
-# Kanade — Kernel-Agnostic Native ARM64 Dylib Embedder
+<h1 align="center">Kanade</h1>
+
+<p align="center">
+  <img src="icon.webp" alt="Kanade icon" width="180" />
+</p>
+
+<p align="center">
+  <em><strong>K</strong>ernel-<strong>A</strong>gnostic <strong>N</strong>ative
+  <strong>A</strong>RM64 <strong>D</strong>ylib <strong>E</strong>mbedder — host-side
+  Mach-O patching for <a href="https://github.com/IPA-Patch">IPA-Patch</a> tweaks.</em>
+</p>
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" />
