@@ -49,6 +49,12 @@ Usage: build_patched_ipa.sh --recipe NAME --framework BASENAME --dylib PATH --in
   --input IPA        Path to the clean .ipa (decrypted; this script does
                      NOT distribute the IPA itself).
   --output IPA       Optional; defaults to packages/ipa/<basename-of-dylib>.ipa.
+  --bundle-id-suffix SUFFIX
+                     Optional; if non-empty, append ".<SUFFIX>" to the
+                     Info.plist CFBundleIdentifier so the patched IPA
+                     installs alongside the original app instead of
+                     overwriting it (e.g. "chinlan" turns
+                     com.acme.app into com.acme.app.chinlan).
 EOF
     exit 64
 }
@@ -58,16 +64,18 @@ FRAMEWORK=""
 DYLIB_SRC=""
 INPUT_IPA=""
 OUTPUT_IPA=""
+BUNDLE_ID_SUFFIX=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --recipe)    RECIPE="$2"; shift 2;;
-        --framework) FRAMEWORK="$2"; shift 2;;
-        --dylib)     DYLIB_SRC="$2"; shift 2;;
-        --input)     INPUT_IPA="$2"; shift 2;;
-        --output)    OUTPUT_IPA="$2"; shift 2;;
-        -h|--help)   usage;;
-        *)           echo "error: unknown argument: $1" >&2; usage;;
+        --recipe)            RECIPE="$2"; shift 2;;
+        --framework)         FRAMEWORK="$2"; shift 2;;
+        --dylib)             DYLIB_SRC="$2"; shift 2;;
+        --input)             INPUT_IPA="$2"; shift 2;;
+        --output)            OUTPUT_IPA="$2"; shift 2;;
+        --bundle-id-suffix)  BUNDLE_ID_SUFFIX="$2"; shift 2;;
+        -h|--help)           usage;;
+        *)                   echo "error: unknown argument: $1" >&2; usage;;
     esac
 done
 
@@ -215,6 +223,29 @@ echo "==> verifying LC_LOAD_DYLIB (recipe: $RECIPE)"
 # ---------------------------------------------------------------------------
 echo "==> patching Info.plist (recipe: $RECIPE)"
 "$PY" -m tools.patch_plist --recipe "$RECIPE" "$INFO_PLIST"
+
+# Optional CFBundleIdentifier rewrite so the patched IPA can live
+# side-by-side with the original app instead of overwriting it. Skipped
+# when --bundle-id-suffix is empty (the default), so the pipeline stays
+# a no-op for the "overwrite the original" workflow.
+if [ -n "$BUNDLE_ID_SUFFIX" ]; then
+    ORIGINAL_BUNDLE_ID="$("$PY" -c "import plistlib,sys; print(plistlib.load(open(sys.argv[1],'rb')).get('CFBundleIdentifier',''))" "$INFO_PLIST")"
+    if [ -z "$ORIGINAL_BUNDLE_ID" ]; then
+        echo "error: Info.plist has no CFBundleIdentifier to append suffix to" >&2
+        exit 1
+    fi
+    # Idempotent: if the suffix is already present, don't append it twice.
+    case "$ORIGINAL_BUNDLE_ID" in
+        *".$BUNDLE_ID_SUFFIX")
+            echo "==> CFBundleIdentifier already carries suffix .$BUNDLE_ID_SUFFIX — skipping rewrite"
+            ;;
+        *)
+            NEW_BUNDLE_ID="${ORIGINAL_BUNDLE_ID}.${BUNDLE_ID_SUFFIX}"
+            echo "==> rewriting CFBundleIdentifier: $ORIGINAL_BUNDLE_ID -> $NEW_BUNDLE_ID"
+            "$PY" -m tools.patch_plist --set "CFBundleIdentifier=${NEW_BUNDLE_ID}" "$INFO_PLIST"
+            ;;
+    esac
+fi
 
 # ---------------------------------------------------------------------------
 # 4. inject dylib
