@@ -192,12 +192,36 @@ fi
 APP_NAME="$(basename "$APP_DIR")"
 echo "==> found bundle: $APP_NAME"
 
+# Target Mach-O resolution.
+#
+# Two consumer shapes are supported:
+#
+#   1. Unity-style app whose hook sites live in a Frameworks binary
+#      (e.g. UnityFramework). Path convention:
+#          Payload/<name>.app/Frameworks/<FRAMEWORK>.framework/<FRAMEWORK>
+#
+#   2. Swift / Objective-C app whose hook sites live directly in the
+#      main executable (i.e. --framework is the CFBundleExecutable
+#      basename). Path convention:
+#          Payload/<name>.app/<FRAMEWORK>
+#
+# Try (1) first; fall back to (2) if the framework path is missing but
+# the main-executable path exists. Only one of the two should exist for
+# any given consumer, so there is no ambiguity.
 FRAMEWORK_BIN="$APP_DIR/Frameworks/${FRAMEWORK}.framework/${FRAMEWORK}"
+MAIN_EXE_BIN="$APP_DIR/${FRAMEWORK}"
 INFO_PLIST="$APP_DIR/Info.plist"
 
 if [ ! -f "$FRAMEWORK_BIN" ]; then
-    echo "error: framework Mach-O missing at $FRAMEWORK_BIN" >&2
-    exit 1
+    if [ -f "$MAIN_EXE_BIN" ]; then
+        FRAMEWORK_BIN="$MAIN_EXE_BIN"
+        echo "==> target is main executable: ${APP_NAME%.app}/${FRAMEWORK}"
+    else
+        echo "error: target Mach-O missing." >&2
+        echo "       looked for framework at: $FRAMEWORK_BIN" >&2
+        echo "       looked for main exe  at: $MAIN_EXE_BIN" >&2
+        exit 1
+    fi
 fi
 if [ ! -f "$INFO_PLIST" ]; then
     echo "error: Info.plist missing at $INFO_PLIST" >&2
