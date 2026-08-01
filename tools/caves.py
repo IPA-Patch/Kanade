@@ -88,6 +88,21 @@ def apply_patches(
         # path can match both the site and the cave content byte-for-byte.
         cave_cursor = cave_start
         for site_off, expected, build_payload, label in cave_patches:
+            # A row with no site is a placeholder: the method it used to
+            # patch is gone from this build, but the cave slot it occupied
+            # must stay reserved because consumers address caves by index.
+            # Nothing is written — the payload isn't even built, since it
+            # would need a branch back to a site that doesn't exist. The
+            # slot is sized from `expected`, which the recipe fills with a
+            # zero block of one payload's length for exactly this purpose.
+            if site_off is None:
+                print(
+                    f"  RESERVE {label} "
+                    f"(cave @ 0x{cave_cursor:X}, {len(expected)} B)"
+                )
+                cave_cursor += len(expected)
+                continue
+
             if len(expected) != 4:
                 raise AssertionError(f"cave-patch site must be one 4B insn: {label}")
 

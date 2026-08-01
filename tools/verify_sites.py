@@ -46,13 +46,67 @@ from tools.recipeload import load_recipe
 # the nested boundary, which is the C# decoration convention; we treat
 # '+' and '.' equivalently when matching against the dump.
 #
-# Splitting the LAST '.' off the label gives us (type_name, method_name)
-# in every case we care about.
+# A label may carry a parenthesised parameter-type list to pick one
+# overload out of many ("MessageExtensions.MergeFrom(IMessage,
+# ReadOnlySequence<byte>, bool, ExtensionRegistry)"). Without it,
+# Google.Protobuf's 15 MergeFrom overloads are indistinguishable and the
+# resolver would silently take whichever came first.
 # ---------------------------------------------------------------------------
 
 
-def split_label(label: str) -> tuple[str | None, str]:
-    """Return ``(type_name, method_name)`` from a recipe label.
+def split_params(text: str) -> tuple[str, ...]:
+    """Split a comma-separated C# parameter list, respecting generics.
+
+    ``List<ValueTuple<string, float>> ranked, int topN`` has a comma
+    inside the generic argument list; splitting naively would produce
+    four bogus parameters instead of two.
+    """
+    out: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in text:
+        if ch in "<([":
+            depth += 1
+        elif ch in ">)]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append("".join(current).strip())
+            current = []
+            continue
+        current.append(ch)
+    tail = "".join(current).strip()
+    if tail:
+        out.append(tail)
+    return tuple(p for p in out if p)
+
+
+def param_type(param: str) -> str:
+    """Reduce one declared parameter to its type.
+
+    ``ref ParseContext input`` -> ``ParseContext``;
+    ``int maxLength = 180``    -> ``int``;
+    ``ExtensionRegistry``      -> ``ExtensionRegistry`` (unnamed).
+    """
+    param = param.split("=", 1)[0].strip()
+    for modifier in ("ref ", "out ", "in ", "params ", "this "):
+        while param.startswith(modifier):
+            param = param[len(modifier):].lstrip()
+    # A declared name is whatever follows the last top-level space; a bare
+    # type has no space to split on.
+    depth = 0
+    for i in range(len(param) - 1, -1, -1):
+        ch = param[i]
+        if ch in ">)]":
+            depth += 1
+        elif ch in "<([":
+            depth -= 1
+        elif ch == " " and depth == 0:
+            return param[:i].strip()
+    return param
+
+
+def split_label(label: str) -> tuple[str | None, str, tuple[str, ...] | None]:
+    """Return ``(type_name, method_name, param_types)`` from a recipe label.
 
     ``+`` in the type segment is normalised to ``.`` so it lines up with
     the dump-index's nested-type spelling.
@@ -65,14 +119,25 @@ def split_label(label: str) -> tuple[str | None, str]:
     Constructor entries are spelled either ``Foo.ctor`` (recipe) or
     ``.ctor`` (dump signature). We normalise the recipe form to
     ``.ctor`` so the dump match works without special-casing.
+
+    ``param_types`` is ``None`` when the label carries no parenthesised
+    list, meaning "any overload".
     """
+    head, sep, rest = label.partition("(")
+    params: tuple[str, ...] | None = None
+    if sep:
+        params = tuple(
+            param_type(p) for p in split_params(rest.rsplit(")", 1)[0])
+        )
+    label = head.strip()
+
     if "." not in label:
-        return None, label
+        return None, label, params
     type_name, method_name = label.rsplit(".", 1)
     type_name = type_name.replace("+", ".")
     if method_name == "ctor":
         method_name = ".ctor"
-    return type_name, method_name
+    return type_name, method_name, params
 
 
 # ---------------------------------------------------------------------------
@@ -86,11 +151,19 @@ def load_dump_index(path: str) -> dict:
 
 
 def types_by_name(index: dict) -> dict[str, list[dict]]:
-    """Bucket types by their bare ``name`` so we don't have to re-scan
-    the 20k+ row list per lookup."""
+    """Bucket types by name so we don't have to re-scan the 20k+ row list
+    per lookup.
+
+    Each type is filed under both its bare ``name`` and its
+    namespace-qualified spelling, so a recipe may write either
+    ``HeaderProvider`` or ``Project.Network.HeaderProvider``.
+    """
     out: dict[str, list[dict]] = {}
     for t in index.get("types", []):
         out.setdefault(t["name"], []).append(t)
+        namespace = t.get("namespace", "")
+        if namespace:
+            out.setdefault(f"{namespace}.{t['name']}", []).append(t)
     return out
 
 
@@ -114,17 +187,44 @@ def _sig_matches(sig: str, method_name: str) -> bool:
     return f" {method_name}(" in sig or f".{method_name}(" in sig
 
 
+def sig_param_types(sig: str) -> tuple[str, ...]:
+    """Return the declared parameter types of a dump-index signature."""
+    _head, sep, rest = sig.partition("(")
+    if not sep:
+        return ()
+    return tuple(param_type(p) for p in split_params(rest.rsplit(")", 1)[0]))
+
+
+def _params_match(sig: str, wanted: tuple[str, ...]) -> bool:
+    """True if ``sig``'s parameter types match ``wanted``.
+
+    Comparison is on the trailing segment of each type so a recipe can
+    write ``ReadOnlySequence<byte>`` against a dump that spells it
+    ``pb::ReadOnlySequence<byte>``, and on arity first so an overload with
+    a different parameter count is rejected outright.
+    """
+    actual = sig_param_types(sig)
+    if len(actual) != len(wanted):
+        return False
+    return all(
+        a == w or a.endswith(f".{w}") or a.endswith(f"::{w}")
+        for a, w in zip(actual, wanted, strict=True)
+    )
+
+
 def find_method(
     by_name: dict[str, list[dict]],
     type_name: str | None,
     method_name: str,
     expected_rva: int | None = None,
+    param_types: tuple[str, ...] | None = None,
 ) -> tuple[dict, dict] | None:
     """Return ``(type_record, method_record)`` for the method matching
     ``method_name`` on the named type.
 
-    When the type has overloads (multiple sigs with the same method name),
-    and ``expected_rva`` is provided, the overload whose ``rva`` matches is
+    ``param_types`` selects one overload by its declared parameter types;
+    without it any overload matches. When the type has overloads and
+    ``expected_rva`` is provided, the overload whose ``rva`` matches is
     preferred over the first textual hit. This resolves ambiguity for
     methods like ``TryMakeMove`` that appear in both a single-arg and an
     out-arg variant.
@@ -134,7 +234,10 @@ def find_method(
     def _pick_best(candidates_iter):
         first_hit = None
         for t, m in candidates_iter:
-            if not _sig_matches(m.get("sig", ""), method_name):
+            sig = m.get("sig", "")
+            if not _sig_matches(sig, method_name):
+                continue
+            if param_types is not None and not _params_match(sig, param_types):
                 continue
             if expected_rva is not None and int(m.get("rva", "0x0"), 0) == expected_rva:
                 return t, m  # exact RVA match wins immediately
@@ -244,13 +347,16 @@ def verify(args: argparse.Namespace) -> int:
         label = row[-1]
         total += 1
         try:
-            type_name, method_name = split_label(label)
+            type_name, method_name, param_types = split_label(label)
         except ValueError as e:
             print(f"  FAIL  slot[{slot_index:>2}] {label!r}: {e}")
             fail += 1
             continue
 
-        hit = find_method(by_name, type_name, method_name, expected_rva=site_off)
+        hit = find_method(
+            by_name, type_name, method_name,
+            expected_rva=site_off, param_types=param_types,
+        )
         if hit is None:
             print(
                 f"  FAIL  slot[{slot_index:>2}] {label!r}: "
