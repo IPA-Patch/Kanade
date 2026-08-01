@@ -48,7 +48,8 @@ Usage: build_patched_ipa.sh --recipe NAME --framework BASENAME --dylib PATH --in
                      Its basename must match the recipe's DYLIB_PATH leaf.
   --input IPA        Path to the clean .ipa (decrypted; this script does
                      NOT distribute the IPA itself).
-  --output IPA       Optional; defaults to packages/ipa/<basename-of-dylib>.ipa.
+  --output IPA       Optional; defaults to packages/ipa/<basename-of-input>-patched.ipa
+                     (e.g. Kiou-1.0.1.ipa -> packages/ipa/Kiou-1.0.1-patched.ipa).
 EOF
     exit 64
 }
@@ -114,8 +115,10 @@ else
 fi
 
 DYLIB_BASENAME="$(basename "$DYLIB_SRC")"
-DYLIB_STEM="${DYLIB_BASENAME%.dylib}"
-OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${DYLIB_STEM}-patched.ipa}"
+INPUT_BASENAME="$(basename "$INPUT_IPA")"
+# Strip the .ipa suffix case-insensitively so Foo.IPA / Foo.Ipa also yield "Foo".
+INPUT_STEM="${INPUT_BASENAME%.[Ii][Pp][Aa]}"
+OUTPUT_IPA="${OUTPUT_IPA:-$CONSUMER_DIR/packages/ipa/${INPUT_STEM}-patched.ipa}"
 WORK_DIR="$CONSUMER_DIR/.theos/ipa_build"
 
 # ---------------------------------------------------------------------------
@@ -189,12 +192,36 @@ fi
 APP_NAME="$(basename "$APP_DIR")"
 echo "==> found bundle: $APP_NAME"
 
+# Target Mach-O resolution.
+#
+# Two consumer shapes are supported:
+#
+#   1. Unity-style app whose hook sites live in a Frameworks binary
+#      (e.g. UnityFramework). Path convention:
+#          Payload/<name>.app/Frameworks/<FRAMEWORK>.framework/<FRAMEWORK>
+#
+#   2. Swift / Objective-C app whose hook sites live directly in the
+#      main executable (i.e. --framework is the CFBundleExecutable
+#      basename). Path convention:
+#          Payload/<name>.app/<FRAMEWORK>
+#
+# Try (1) first; fall back to (2) if the framework path is missing but
+# the main-executable path exists. Only one of the two should exist for
+# any given consumer, so there is no ambiguity.
 FRAMEWORK_BIN="$APP_DIR/Frameworks/${FRAMEWORK}.framework/${FRAMEWORK}"
+MAIN_EXE_BIN="$APP_DIR/${FRAMEWORK}"
 INFO_PLIST="$APP_DIR/Info.plist"
 
 if [ ! -f "$FRAMEWORK_BIN" ]; then
-    echo "error: framework Mach-O missing at $FRAMEWORK_BIN" >&2
-    exit 1
+    if [ -f "$MAIN_EXE_BIN" ]; then
+        FRAMEWORK_BIN="$MAIN_EXE_BIN"
+        echo "==> target is main executable: ${APP_NAME%.app}/${FRAMEWORK}"
+    else
+        echo "error: target Mach-O missing." >&2
+        echo "       looked for framework at: $FRAMEWORK_BIN" >&2
+        echo "       looked for main exe  at: $MAIN_EXE_BIN" >&2
+        exit 1
+    fi
 fi
 if [ ! -f "$INFO_PLIST" ]; then
     echo "error: Info.plist missing at $INFO_PLIST" >&2

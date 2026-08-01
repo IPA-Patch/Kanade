@@ -1,7 +1,7 @@
 <h1 align="center">Kanade</h1>
 
 <p align="center">
-  <img src="icon.webp" alt="Kanade icon" width="180" />
+  <img src="icon.webp" alt="Kanade icon" width="180" height="180" />
 </p>
 
 <p align="center">
@@ -180,7 +180,10 @@ python3 shared/tools/dump.py          # process all missing versions
 python3 shared/tools/dump.py --force  # re-dump even if dump.cs exists
 ```
 
-Requires `dotnet` 8.x on PATH (`apt install dotnet-sdk-8.0` on Ubuntu 24.04).
+Requires `dotnet` 8.x on PATH. Il2CppDumper only needs the runtime, so
+`dotnet-runtime-8.0` is enough (`ghcr.io/devcontainers/features/dotnet:2` with
+`{"version": "none", "dotnetRuntimeVersions": "8.0"}` in a devcontainer, or
+`apt install dotnet-runtime-8.0` on Ubuntu 24.04).
 
 ## Checking for RVA drift after a target update
 
@@ -198,6 +201,41 @@ PYTHONPATH=shared:. python3 -m tools.verify_sites \
 Any mismatch is reported with the expected vs. found prologue bytes and the
 dump line number. Create a new `recipes/v<maj>_<min>_<patch>.py` with the
 updated addresses and register it in `recipes/__init__.py`.
+
+### Porting the SITES table automatically
+
+`tools/port_recipe.py` does the mechanical part of that: it looks every row's
+label up in the new dump index, rewrites the RVA and prologue columns from the
+new binary, and leaves row order, comments, and every other column untouched.
+
+```sh
+PYTHONPATH=shared python3 -m tools.port_recipe \
+  --base-recipe recipes/v1_0_2.py \
+  --index       assets/1.1.0/dump.cs.index.json \
+  --ipa         assets/1.1.0/AppName-1.1.0.ipa \
+  --out         recipes/v1_1_0.py
+```
+
+Rows whose label no longer resolves keep their old values, gain a
+`# TODO(port_recipe): unresolved` marker, and make the tool exit non-zero —
+those are the ones that need a human to look at the dump. Row order is never
+changed: cave payloads are allocated in declaration order while the runtime
+dispatcher indexes by hook id, so a reordered table mispoints every
+orig-call trampoline.
+
+### Field offsets
+
+Prologue checks catch a moved method but not a moved *field* — a class that
+gains a member above the one a hook reads shifts everything below it.
+`tools/verify_offsets.py` diffs the field offsets of named types between two
+dumps:
+
+```sh
+PYTHONPATH=shared python3 -m tools.verify_offsets \
+  --old assets/1.0.2/dump.cs --old-index assets/1.0.2/dump.cs.index.json \
+  --new assets/1.1.0/dump.cs --new-index assets/1.1.0/dump.cs.index.json \
+  --type SomeReply --type SomeStatus
+```
 
 ## Development
 

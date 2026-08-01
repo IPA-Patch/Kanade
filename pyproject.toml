@@ -1,6 +1,6 @@
 [project]
 name = "ipa-patch-shared"
-version = "0.1.2"
+version = "0.2.0"
 description = "Kanade — static-patch tooling for IPA-Patch projects (arm64 encoder, Mach-O ops, IPA pipeline)."
 readme = "README.md"
 requires-python = ">=3.12"
